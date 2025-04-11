@@ -1,0 +1,943 @@
+
+_START:
+
+    LCD_INIT:
+        # Send initialization commands
+        li t0, 0x10004000            # LCD Base
+        li t1, 0x28                  # Function set: 4-bit, 2 lines, 5x8 font
+        jal ra, LCD_Send_Command                   
+        jal ra, delay_short
+
+        li t1, 0x0C                  # Display on, cursor off, blinking off
+        jal ra, LCD_Send_Command
+        jal ra, delay_short
+
+        li t1, 0x06                  # Entry mode: increment cursor, no shift
+        jal ra, LCD_Send_Command
+        jal ra, delay_short
+
+        li t1, 0x01                  # Clear display
+        jal ra, LCD_Send_Command
+        jal ra, delay_long
+
+    li t0, 0x00001000
+    sw zero, 0(t0)
+    li t0, 0x00001004
+    sw zero, 0(t0)
+    li t0, 0x00001008
+    sw zero, 0(t0)
+
+_CHECK_BUTTON:
+    li t0, 0x10010000
+    lw t1, 0(t0)
+    
+    andi t2, t1, 0x1  # t2 = SW0 (Result)
+    bnez t2, SW_0
+    
+    srli t1, t1, 1
+    andi t2, t1, 0x1  # t2 = SW1 (Node A)
+    bnez t2, SW_A
+    
+    srli t1, t1, 1
+    andi t2, t1, 0x1  # t2 = SW1 (Node B)
+    bnez t2, SW_B
+    
+    srli t1, t1, 1
+    andi t2, t1, 0x1  # t2 = SW1 (Node C)
+    bnez t2, SW_C
+    j _CHECK_BUTTON
+
+SW_0:
+    mv t6, ra
+    ############## Show Result ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+
+    SHOW_RESULT:
+        li t0, 0x00001000
+        lw t1, 0(t0)
+        beqz t1, MISS_INFO
+        li t0, 0x00001004
+        lw t1, 0(t0)
+        beqz t1, MISS_INFO
+        li t0, 0x00001008
+        lw t1, 0(t0)
+        beqz t1, MISS_INFO
+        
+        ##### Calculate and show Result #####
+        
+        li t0, 0x0000100C       # Get A_x
+        lw t1,0(t0)
+        li t0, 0x00001024       # Get C_x
+        lw t2,0(t0)
+        sub t1, t1, t2          # t1 = Ax - Cx
+        call square             # t1 = (Ax - Cx)^2
+        li t0, 0x00001030
+        sw t1, 0(t0)            # Save (Ax-Cx)^2
+
+        li t0, 0x00001010       # Get A_y
+        lw t1,0(t0)
+        li t0, 0x00001028       # Get C_Y
+        lw t2,0(t0)
+        sub t1, t1, t2          # t1 = AY - CY
+        call square             # t1 = (AY - CY)^2
+        li t0, 0x00001034
+        sw t1, 0(t0)            # Save (AY-CY)^2
+
+        li t0, 0x00001014       # Get A_Z
+        lw t1,0(t0)
+        li t0, 0x0000102C       # Get C_Z
+        lw t2,0(t0)
+        sub t1, t1, t2          # t1 = AZ - CZ
+        call square             # t1 = (AZ - CZ)^2
+        li t0, 0x00001038
+        sw t1, 0(t0)            # Save (AZ-CZ)^2
+
+        li t0, 0x00001018       # Get B_X
+        lw t1,0(t0)
+        li t0, 0x00001024       # Get C_X
+        lw t2,0(t0)
+        sub t1, t1, t2          # t1 = BX - CX
+        call square             # t1 = (BX - CX)^2
+        li t0, 0x0000103C
+        sw t1, 0(t0)            # Save (BX-CX)^2
+
+        li t0, 0x0000101C       # Get B_Y
+        lw t1,0(t0)
+        li t0, 0x00001028       # Get C_Y
+        lw t2,0(t0)
+        sub t1, t1, t2          # t1 = BY - CY
+        call square             # t1 = (BY - CY)^2
+        li t0, 0x00001040
+        sw t1, 0(t0)            # Save (BY-CY)^2
+
+        li t0, 0x00001020       # Get B_Z
+        lw t1,0(t0)
+        li t0, 0x0000102C       # Get C_Z
+        lw t2,0(t0)
+        sub t1, t1, t2          # t1 = BZ - CZ
+        call square             # t1 = (BZ - CZ)^2
+        li t0, 0x00001044
+        sw t1, 0(t0)            # Save (BZ-CZ)^2
+
+        # SUM (Ax-Cx)^2 + (Ay-Cy)^2 + (Az - Cz)^2
+        li t0, 0x00001030
+        lw t1,0(t0)
+        li t0, 0x00001034
+        lw t2,0(t0)
+        add t1, t1, t2
+        li t0, 0x00001038
+        lw t2,0(t0)
+        add t1, t1, t2
+        li t0, 0x00001048
+        sw t1, 0(t0)            # Save SUM (Ax-Cx)^2 + (Ay-Cy)^2 + (Az - Cz)^2
+
+        # SUM (Bx-Cx)^2 + (By-Cy)^2 + (Bz - Cz)^2
+        li t0, 0x0000103C
+        lw t1,0(t0)
+        li t0, 0x00001040
+        lw t2,0(t0)
+        add t1, t1, t2
+        li t0, 0x00001044
+        lw t2,0(t0)
+        add t1, t1, t2
+        li t0, 0x0000104C
+        sw t1, 0(t0)            # Save SUM (Bx-Cx)^2 + (By-Cy)^2 + (Bz - Cz)^2
+
+        li t0, 0x00001048
+        lw t2,0(t0)
+        blt t2, t1, b_closer
+        bgt t2, t1, a_closer
+
+    a_closer:
+        li t1, 0x80
+        jal ra, LCD_Send_Command
+        li t1, 'A'
+        jal ra, LCD_Send_Data
+        li t1, ' '
+        jal ra, LCD_Send_Data
+        li t1, 'G'
+        jal ra, LCD_Send_Data
+        li t1, 'A'
+        jal ra, LCD_Send_Data
+        li t1, 'N'
+        jal ra, LCD_Send_Data
+        li t1, ' '
+        jal ra, LCD_Send_Data
+        li t1, 'C'
+        jal ra, LCD_Send_Data
+        li t1, ''
+        jal ra, LCD_Send_Data
+        li t1, 'H'
+        jal ra, LCD_Send_Data
+        li t1, 'O'
+        jal ra, LCD_Send_Data
+        li t1, 'N'
+        jal ra, LCD_Send_Data
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x01
+        bnez t2, SHOW_RESULT
+
+        # Clear display
+        li t0, 0x10004000            # LCD Base
+        li t1, 0x01                  
+        jal ra, LCD_Send_Command
+        jal ra, delay_long
+        li t1, 0x80
+        jal ra, LCD_Send_Command
+        mv t6, ra
+        ret
+
+    b_closer:
+        li t1, 0x80
+        jal ra, LCD_Send_Command
+        li t1, 'B'
+        jal ra, LCD_Send_Data
+        li t1, ' '
+        jal ra, LCD_Send_Data
+        li t1, 'G'
+        jal ra, LCD_Send_Data
+        li t1, 'A'
+        jal ra, LCD_Send_Data
+        li t1, 'N'
+        jal ra, LCD_Send_Data
+        li t1, ' '
+        jal ra, LCD_Send_Data
+        li t1, 'C'
+        jal ra, LCD_Send_Data
+        li t1, ''
+        jal ra, LCD_Send_Data
+        li t1, 'H'
+        jal ra, LCD_Send_Data
+        li t1, 'O'
+        jal ra, LCD_Send_Data
+        li t1, 'N'
+        jal ra, LCD_Send_Data
+
+        # Clear display
+        li t0, 0x10004000            # LCD Base
+        li t1, 0x01                  
+        jal ra, LCD_Send_Command
+        jal ra, delay_long
+        li t1, 0x80
+        jal ra, LCD_Send_Command
+        mv t6, ra
+        ret
+
+    MISS_INFO:
+        li t1, 0x80
+        jal ra, LCD_Send_Command
+        li t1, 'M'
+        jal ra, LCD_Send_Data
+        li t1, 'I'
+        jal ra, LCD_Send_Data
+        li t1, 'S'
+        jal ra, LCD_Send_Data
+        li t1, 'S'
+        jal ra, LCD_Send_Data
+        li t1, ' '
+        jal ra, LCD_Send_Data
+        li t1, 'I'
+        jal ra, LCD_Send_Data
+        li t1, 'N'
+        jal ra, LCD_Send_Data
+        li t1, 'F'
+        jal ra, LCD_Send_Data
+        li t1, 'O'
+        jal ra, LCD_Send_Data
+
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x01
+        bnez t2, SHOW_RESULT
+
+        # Clear display
+        li t0, 0x10004000            # LCD Base
+        li t1, 0x01                  
+        jal ra, LCD_Send_Command
+        jal ra, delay_long
+        li t1, 0x80
+        jal ra, LCD_Send_Command
+        mv t6, ra
+        ret
+
+SW_A:
+    mv t6, ra
+
+    ############## AX ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'X'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoAX:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_AX
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_AX:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch A chuyển trạng thái 1-> 0
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x02
+        bnez t2, ShowInfoAX
+
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x0000100C 
+        sw t2, 0(t1)
+        
+    ############## AY ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'Y'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoAY:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_AY
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_AY:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch A chuyển trạng thái 0 -> 1
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x02
+        beqz t2, ShowInfoAY
+
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x00001010 
+        sw t2, 0(t1)
+
+    ############## AZ ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'Z'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoAZ:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_AZ
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_AZ:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch A chuyển trạng thái 1 -> 0
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x02
+        bnez t2, ShowInfoAZ
+
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x00001014 
+        sw t2, 0(t1)
+
+        # Change NodeA variable 
+        li t1, 0x00001000    
+        addi t2, zero, 1
+        sw t2, 0(t1)
+
+    # Return Main Function
+    mv ra, t6
+    ret
+
+SW_B:
+    mv t6, ra
+
+    ############## BX ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'B'
+    jal ra, LCD_Send_Data
+    li t1, 'X'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoBX:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_BX
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_BX:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch B chuyển trạng thái 1-> 0
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x04
+        bnez t2, ShowInfoBX
+
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x00001018 
+        sw t2, 0(t1)
+        
+    ############## BY ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'B'
+    jal ra, LCD_Send_Data
+    li t1, 'Y'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoBY:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_BY
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_BY:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch B chuyển trạng thái 0 -> 1
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x04
+        beqz t2, ShowInfoBY
+
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x0000101C 
+        sw t2, 0(t1)
+
+    ############## BZ ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'B'
+    jal ra, LCD_Send_Data
+    li t1, 'Z'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoBZ:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_BZ
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_BZ:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch B chuyển trạng thái 1 -> 0
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x04
+        bnez t2, ShowInfoBZ
+
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x00001020 
+        sw t2, 0(t1)
+
+        # Change NodeB variable 
+        li t1, 0x00001004    
+        addi t2, zero, 1
+        sw t2, 0(t1)
+
+    # Return Main Function
+    mv ra, t6
+    ret
+
+SW_C:
+    mv t6, ra
+
+    ############## CX ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'C'
+    jal ra, LCD_Send_Data
+    li t1, 'X'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoCX:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_CX
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_CX:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch C chuyển trạng thái 1-> 0
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x08
+        bnez t2, ShowInfoCX
+
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x00001024 
+        sw t2, 0(t1)
+
+
+    ############## CY ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'C'
+    jal ra, LCD_Send_Data
+    li t1, 'Y'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoCY:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_CY
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_CY:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch C chuyển trạng thái 0 -> 1
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x08
+        beqz t2, ShowInfoCY
+
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x00001028 
+        sw t2, 0(t1)
+
+    ############## CZ ##############
+    # Clear display
+    li t0, 0x10004000            # LCD Base
+    li t1, 0x01                  
+    jal ra, LCD_Send_Command
+    jal ra, delay_long
+    
+    # Line 1
+    li t1, 0x80
+    jal ra, LCD_Send_Command
+    li t1, 'N'
+    jal ra, LCD_Send_Data
+    li t1, 'H'
+    jal ra, LCD_Send_Data
+    li t1, 'A'
+    jal ra, LCD_Send_Data
+    li t1, 'P'
+    jal ra, LCD_Send_Data
+    li t1, ' '
+    jal ra, LCD_Send_Data
+    li t1, 'C'
+    jal ra, LCD_Send_Data
+    li t1, 'Z'
+    jal ra, LCD_Send_Data
+
+
+    ShowInfoCZ:    
+        # Line 2
+        li t0, 0x10010000       # Switch Base
+        lw t3, 0(t0)
+        addi t2, zero, 10
+        blt t3, t2, single_digit_CZ
+        
+        addi t2, zero, 1
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số chục
+        
+        # Tính chữ số đơn vị
+        li t2, 10
+        sub t2, t3, t2     
+        addi t1, t2, 0x30           # Chuyển thành ASCII
+        li t0, 0x10004000           # LCD Base
+        jal ra, LCD_Send_Data       # Hiển thị chữ số đơn vị
+        
+        single_digit_CZ:
+            addi t1, t1, 0x30
+            jal ra, LCD_Send_Data
+
+    # Check Switch C chuyển trạng thái 1 -> 0
+        li t0, 0x10010000        # Switch Base
+        lw t1, 0(t0)
+        andi t2, t1 , 0x08
+        bnez t2, ShowInfoCZ
+
+        
+        # Save to memory
+        andi t2, t1 , 0xF0
+        li t1, 0x0000102C 
+        sw t2, 0(t1)
+
+        # Change NodeC variable
+        li t1, 0x00001008      
+        addi t2, zero, 1
+        sw t2, 0(t1)
+
+    # Return Main Function
+    mv ra, t6
+    ret
+
+
+LCD_Send_Command:
+    mv t6, ra
+    # Send high nibble (4 bits cao)
+    srli t2, t1, 4         # t2 = t1 >> 4 (4 bits cao)
+    andi t2, t2, 0x0F      # mask lại 4 bits thấp
+    slli t3, t2, 3
+    sw t3, 0(t0)           # send data with E=0
+    jal ra, pulse_E
+    
+    # Send low nibble (4 bits thấp)
+    andi t2, t1, 0x0F      # t2 = 4 bits thấp
+    slli t3, t2, 3         
+    sw t3, 0(t0)           # Gửi data với E=0
+    jal ra, pulse_E 
+
+    jal ra, delay_short    # delay sau 1 lệnh
+    mv ra, t6
+    ret
+    
+ pulse_E:
+    mv a0, ra
+    ori  t4,t3, 0x04
+    sw t4, 0(t0)
+    jal ra, delay_very_short
+    sw t3, 0(t0)
+    mv ra, a0
+    ret
+    
+LCD_Send_Data:
+    mv t6, ra
+    li t0, 0x10004000     # Địa chỉ thanh ghi LCD
+    
+    # Gửi 4-bit cao trước
+    srli t2, t1, 4
+    andi t2, t2, 0x0F
+    slli t3, t2, 3
+    ori  t3, t3, 1
+    sw   t3, 0(t0)
+    jal ra, pulse_E
+    
+    # Send low nibble (4 bits thấp)
+    andi t2, t1, 0x0F      # t2 = 4 bits thấp
+    slli t3, t2, 3
+    ori  t3, t3, 1
+    sw t3, 0(t0)           # Gửi data với E=1
+    jal ra, pulse_E 
+    jal ra, delay_short    # delay sau 1 lệnh
+    
+    mv ra, t6
+    ret
+    
+# Subroutine: Short delay (~40 us at 50 MHz)
+delay_short:
+    li t5, 2000                  # 2000 cycles (~40 us at 50 MHz)
+delay_short_loop:
+    addi t5, t5, -1
+    bne t5, zero, delay_short_loop
+    ret
+    
+# Subroutine: Long delay (~1.6 ms for clear display)
+delay_long:
+    li t5, 80000                 # 80000 cycles (~1.6 ms at 50 MHz)
+delay_long_loop:
+    addi t5, t5, -1
+    bne t5, zero, delay_long_loop
+    ret
+
+delay_very_short:
+    li t5, 10      
+delay_very_short_loop:
+
+    addi t5, t5, -1
+    bnez t5, delay_very_short_loop
+    ret
+
+Square:
+    mv a1, ra
+    # Lưu dấu và lấy giá trị tuyệt đối
+    mv t2, t1
+    bge t2, zero, positive
+    sub t2, zero, t2            # t2 = |n| nếu n âm
+positive:
+    mv t3, t2
+    li t1, 0
+    beq t2, zero, square_end
+
+square_loop:
+    add t1, t1, t2      # t1 += |n|
+    addi t3, t3, -1     # Giảm bộ đếm
+    bnez t3, square_loop
+
+
+square_end:
+    mv ra, a1
+    ret
